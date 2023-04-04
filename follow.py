@@ -38,8 +38,6 @@ curses.curs_set( 0 )
 curses.cbreak()
 stdscr.keypad( True )
 
-output = None
-
 v_offset = 0
 h_offset = 0
 v_end = False
@@ -60,10 +58,6 @@ try:
 		display_height = screen_height - title_height
 		display_width = screen_width
 
-		# Size of the result in both directions
-		res_max_height = 0
-		res_max_width = 0
-
 		# Execute the command
 		if args.shell:
 			process = subprocess.Popen( " ".join( args.command ), stdout = subprocess.PIPE, stderr = subprocess.STDOUT, shell = True )
@@ -73,26 +67,21 @@ try:
 		del process
 
 		# Process the result
-		input_lines = stdout.decode( "ascii" ).split( "\n" )
-		output_lines = []
-		for line in input_lines:
-			line_len = len( line )
-			if True: #line_len > 0 and line[0] != "-":
-				res_max_height = res_max_height + 1
-				if line_len > res_max_width:
-					res_max_width = line_len
-				output_lines.append( line )
+		res_lines = stdout.decode( "ascii" ).split( "\n" )
 
+		# Size of the result in both directions
+		res_max_height = len( res_lines )
+		res_max_width = max( len( line ) for line in res_lines )
 
 		if res_max_height <= display_height:
 			v_offset = 0
-			display_lines = output_lines
+			display_lines = res_lines
 		else:
 			if v_offset < 0:
 				v_offset = 0
 			elif v_offset + display_height > res_max_height or v_end:
 				v_offset = res_max_height - display_height
-			display_lines = output_lines[v_offset:v_offset+display_height]
+			display_lines = res_lines[v_offset:v_offset+display_height]
 
 		if res_max_width <= display_width:
 			h_offset = 0
