@@ -38,6 +38,11 @@ curses.curs_set( 0 )
 curses.cbreak()
 stdscr.keypad( True )
 
+res_lines = None
+res_max_height = 0
+res_max_width = 0
+elapsed = True
+
 v_offset = 0
 h_offset = 0
 v_end = False
@@ -58,20 +63,21 @@ try:
 		display_height = screen_height - title_height
 		display_width = screen_width
 
-		# Execute the command
-		if args.shell:
-			process = subprocess.Popen( " ".join( args.command ), stdout = subprocess.PIPE, stderr = subprocess.STDOUT, shell = True )
-		else:
-			process = subprocess.Popen( args.command, stdout = subprocess.PIPE, stderr = subprocess.STDOUT )
-		stdout, stderr = process.communicate()
-		del process
+		if elapsed:
+			# Execute the command
+			if args.shell:
+				process = subprocess.Popen( " ".join( args.command ), stdout = subprocess.PIPE, stderr = subprocess.STDOUT, shell = True )
+			else:
+				process = subprocess.Popen( args.command, stdout = subprocess.PIPE, stderr = subprocess.STDOUT )
+			stdout, stderr = process.communicate()
+			del process
 
-		# Process the result
-		res_lines = stdout.decode( "ascii" ).split( "\n" )
+			# Process the result
+			res_lines = stdout.decode( "ascii" ).split( "\n" )
 
-		# Size of the result in both directions
-		res_max_height = len( res_lines )
-		res_max_width = max( len( line ) for line in res_lines )
+			# Size of the result in both directions
+			res_max_height = len( res_lines )
+			res_max_width = max( len( line ) for line in res_lines )
 
 		if res_max_height <= display_height:
 			v_offset = 0
@@ -108,45 +114,41 @@ try:
 
 		stdscr.refresh()
 
-		# We want to refresh the window every interval;
-		# this is done by waiting for a key to be pressed.
-		# Once a key has been pressed, get the whole content from STDIN
-		# without waiting again for one second.
-		begin = True
-		while True:
-			if begin:
-				curses.halfdelay( args.interval * 10 )
-				stdscr.nodelay( False )
-				begin = False
-			else:
-				stdscr.nodelay( True )
+		# We want to refresh the window every interval; this is done by waiting for a key to be pressed.
+		# Once a key has been pressed, get the whole content from STDIN without waiting again.
+		if elapsed:
+			curses.halfdelay( args.interval * 10 )
+			stdscr.nodelay( False )
+			elapsed = False
+		else:
+			stdscr.nodelay( True )
 
-			# Get one character from STDIN
-			c = stdscr.getch()
+		# Get one character from STDIN
+		c = stdscr.getch()
 
-			# Handle key
-			if c == ord( 'q' ):
-				raise KeyboardInterrupt
-			elif c == curses.KEY_LEFT:
-				h_offset = h_offset - 1
-			elif c == curses.KEY_RIGHT:
-				h_offset = h_offset + 1
-			elif c == curses.KEY_UP:
-				v_offset = v_offset - 1
-			elif c == curses.KEY_DOWN:
-				v_offset = v_offset + 1
-			elif c == ord( 'b' ):
-				v_offset = v_offset - display_height
-			elif c == ord( ' ' ):
-				v_offset = v_offset + display_height
-			elif c == ord( 'd' ):
-				v_offset = v_offset + display_height // 2
-			elif c == ord( 'u' ):
-				v_offset = v_offset - display_height // 2
-			elif c == ord( 'f' ):
-				v_end = not v_end
-			else:
-				break
+		# Handle key
+		if c == -1:
+			elapsed = True
+		elif c == ord( 'q' ):
+			raise KeyboardInterrupt
+		elif c == curses.KEY_LEFT:
+			h_offset = h_offset - 1
+		elif c == curses.KEY_RIGHT:
+			h_offset = h_offset + 1
+		elif c == curses.KEY_UP:
+			v_offset = v_offset - 1
+		elif c == curses.KEY_DOWN:
+			v_offset = v_offset + 1
+		elif c == ord( 'b' ):
+			v_offset = v_offset - display_height
+		elif c == ord( ' ' ):
+			v_offset = v_offset + display_height
+		elif c == ord( 'd' ):
+			v_offset = v_offset + display_height // 2
+		elif c == ord( 'u' ):
+			v_offset = v_offset - display_height // 2
+		elif c == ord( 'f' ):
+			v_end = not v_end
 except KeyboardInterrupt:
 	pass
 finally:
