@@ -17,15 +17,23 @@
 # limitations under the License.
 
 import sys
+import time
 import curses
 import socket
 import subprocess
 import argparse
 
+def positive_float( value ):
+	parsed = float( value )
+	if parsed > 0.:
+		return parsed
+	else:
+		raise ValueError( "Value must be strictly positive" )
+
 parser = argparse.ArgumentParser()
 
 parser.add_argument( "command", nargs = argparse.REMAINDER, help = "Command to watch" )
-parser.add_argument( "--interval", "-n", type = int, default = 1, help = "Update interval time (seconds)" )
+parser.add_argument( "--interval", "-n", type = positive_float, default = 1., help = "Update interval time (seconds)" )
 parser.add_argument( "--shell", "-s", action = "store_true", help = "Execute command through a shell" )
 
 args = parser.parse_args()
@@ -42,6 +50,7 @@ res_lines = None
 res_max_height = 0
 res_max_width = 0
 elapsed = True
+last_time = None
 
 v_offset = 0
 h_offset = 0
@@ -64,6 +73,8 @@ try:
 		display_width = screen_width
 
 		if elapsed:
+			last_time = time.monotonic()
+
 			# Execute the command
 			if args.shell:
 				process = subprocess.Popen( " ".join( args.command ), stdout = subprocess.PIPE, stderr = subprocess.STDOUT, shell = True )
@@ -115,13 +126,16 @@ try:
 		stdscr.refresh()
 
 		# We want to refresh the window every interval; this is done by waiting for a key to be pressed.
-		# Once a key has been pressed, get the whole content from STDIN without waiting again.
-		if elapsed:
-			curses.halfdelay( args.interval * 10 )
-			stdscr.nodelay( False )
-			elapsed = False
-		else:
-			stdscr.nodelay( True )
+		# The wait interval is recomputed so that the time interval between two command execution is
+		# as close as possible to the provided value.
+		new_time = time.monotonic()
+		# Remaining time to wait in seconds
+		rem_time = args.interval - ( new_time - last_time )
+		# curses.halfdelay takes a strictly positive wait time in tenths of seconds
+		curses.halfdelay( max( int( rem_time * 10 + 0.5 ), 1 ) )
+
+		# Reset this one
+		elapsed = False
 
 		# Get one character from STDIN
 		c = stdscr.getch()
