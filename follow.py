@@ -32,13 +32,20 @@ def positive_float( value ):
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument( "command", nargs = argparse.REMAINDER, help = "Command to watch" )
+parser.add_argument( "command", help = "Command to watch" )
+parser.add_argument( "arguments", nargs = argparse.REMAINDER, help = "Command to watch" )
 parser.add_argument( "--interval", "-n", type = positive_float, default = 1., help = "Update interval time (seconds)" )
 parser.add_argument( "--shell", "-s", action = "store_true", help = "Execute command through a shell" )
 
 args = parser.parse_args()
 
-title = socket.gethostname() + " " + args.command[0] + " output"
+command_args = [ args.command ] + args.arguments
+if args.shell:
+	command_args = " ".join( command_args )
+
+title = socket.gethostname() + " " + args.command + " output"
+title_height = 1
+title_width = len( title )
 
 stdscr = curses.initscr()
 curses.noecho()
@@ -60,8 +67,7 @@ try:
 	while True:
 		stdscr.erase()
 		screen_height, screen_width = stdscr.getmaxyx()
-		title_height = 1
-		title_width = len( title )
+
 		try:
 			stdscr.addstr( 0, int( ( screen_width - title_width ) / 2. ), title, curses.A_REVERSE )
 		except:
@@ -76,10 +82,7 @@ try:
 			last_time = time.monotonic()
 
 			# Execute the command
-			if args.shell:
-				process = subprocess.Popen( " ".join( args.command ), stdout = subprocess.PIPE, stderr = subprocess.STDOUT, shell = True )
-			else:
-				process = subprocess.Popen( args.command, stdout = subprocess.PIPE, stderr = subprocess.STDOUT )
+			process = subprocess.Popen( command_args, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, shell = args.shell )
 			stdout, stderr = process.communicate()
 			del process
 
@@ -108,20 +111,15 @@ try:
 			elif h_offset + display_width > res_max_width:
 				h_offset = res_max_width - display_width
 
-		curline = 1
-		for line in display_lines:
-			if h_offset > 0:
-				if len( line ) <= h_offset:
-					line = ""
-				else:
-					line = line[h_offset:]
-			if len( line ) > display_width:
-				line = line[:display_width]
+		for num, line in enumerate( display_lines ):
+			line_len = len( line )
+			if line_len <= h_offset:
+				continue
+			end = min( line_len - h_offset, h_offset + display_width )
 			try:
-				stdscr.addstr( curline, 0, line )
+				stdscr.addstr( num + 1, 0, line[h_offset:end] )
 			except:
 				pass
-			curline = curline + 1
 
 		stdscr.refresh()
 
