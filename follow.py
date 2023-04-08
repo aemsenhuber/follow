@@ -129,8 +129,15 @@ try:
 		new_time = time.monotonic()
 		# Remaining time to wait in seconds
 		rem_time = args.interval - ( new_time - last_time )
-		# curses.halfdelay takes a strictly positive wait time in tenths of seconds
-		curses.halfdelay( max( int( rem_time * 10 + 0.5 ), 1 ) )
+		# Convert into tenths of seconds, which is the unit used by curses.halfdelay()
+		tenths = int( rem_time * 10 + 0.5 )
+		# curses.halfdelay takes a number between 1 and 255
+		if tenths > 255:
+			last = False
+			tenths = 255
+		else:
+			last = True
+		curses.halfdelay( max( tenths, 1 ) )
 
 		# Reset this one
 		elapsed = False
@@ -140,7 +147,7 @@ try:
 
 		# Handle key
 		if c == -1:
-			elapsed = True
+			elapsed = last
 		elif c == ord( 'q' ):
 			raise KeyboardInterrupt
 		elif c == curses.KEY_LEFT:
