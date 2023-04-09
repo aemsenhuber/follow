@@ -87,7 +87,7 @@ try:
 			del process
 
 			# Process the result
-			res_lines = stdout.decode( "ascii" ).split( "\n" )
+			res_lines = stdout.decode( stdscr.encoding ).split( "\n" )
 
 			# Size of the result in both directions
 			res_max_height = len( res_lines )
