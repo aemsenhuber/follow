@@ -62,6 +62,9 @@ last_time = None
 v_offset = 0
 h_offset = 0
 v_end = False
+v_diff = 0
+h_diff = 0
+past = False
 
 try:
 	while True:
@@ -93,33 +96,46 @@ try:
 			res_max_height = len( res_lines )
 			res_max_width = max( len( line ) for line in res_lines )
 
-		if res_max_height <= display_height:
-			v_offset = 0
-			display_lines = res_lines
-		else:
+		if v_end:
+			v_offset = max( res_max_height - display_height, 0 )
+		elif v_diff != 0 and past:
+			v_offset += v_diff
+		elif v_diff > 0:
+			v_offset = max( v_offset, min( v_offset + v_diff, max( res_max_height - display_height, 0 ) ) )
+		elif v_diff < 0:
+			v_offset = min( v_offset, max( v_offset + v_diff, 0 ) )
+
+		if h_diff != 0 and past:
+			h_offset += h_diff
+		elif h_diff > 0:
+			h_offset = max( h_offset, min( h_offset + h_diff, max( res_max_width - display_width, 0 ) ) )
+		elif h_diff < 0:
+			h_offset = min( h_offset, max( h_offset + h_diff, 0 ) )
+
+		if v_offset > -display_height and v_offset < res_max_height and h_offset > -display_width and h_offset < res_max_width:
 			if v_offset < 0:
-				v_offset = 0
-			elif v_offset + display_height > res_max_height or v_end:
-				v_offset = res_max_height - display_height
-			display_lines = res_lines[v_offset:v_offset+display_height]
+				v_disp_off = -v_offset
+				v_start = 0
+			else:
+				v_disp_off = 0
+				v_start = v_offset
 
-		if res_max_width <= display_width:
-			h_offset = 0
-		else:
 			if h_offset < 0:
-				h_offset = 0
-			elif h_offset + display_width > res_max_width:
-				h_offset = res_max_width - display_width
+				h_disp_off = -h_offset
+				h_start = 0
+			else:
+				h_disp_off = 0
+				h_start = h_offset
 
-		for num, line in enumerate( display_lines ):
-			line_len = len( line )
-			if line_len <= h_offset:
-				continue
-			end = min( line_len - h_offset, h_offset + display_width )
-			try:
-				stdscr.addstr( num + 1, 0, line[h_offset:end] )
-			except:
-				pass
+			for num, line in enumerate( res_lines[v_start:v_offset+display_height] ):
+				line_len = len( line )
+				if line_len <= h_offset:
+					continue
+				h_end = min( line_len - h_start, h_offset + display_width )
+				try:
+					stdscr.addstr( v_disp_off + num + title_height, h_disp_off, line[h_start:h_end] )
+				except:
+					pass
 
 		stdscr.refresh()
 
@@ -139,8 +155,9 @@ try:
 			last = True
 		curses.halfdelay( max( tenths, 1 ) )
 
-		# Reset this one
+		# Reset these ones
 		elapsed = False
+		past = False
 
 		# Get one character from STDIN
 		c = stdscr.getch()
@@ -148,25 +165,38 @@ try:
 		# Handle key
 		if c == -1:
 			elapsed = last
+		elif c == ord( 'r' ) or c == ord( 'R' );
+			elapsed = True
 		elif c == ord( 'q' ):
 			raise KeyboardInterrupt
 		elif c == curses.KEY_LEFT:
-			h_offset = h_offset - 1
+			h_diff = -1
 		elif c == curses.KEY_RIGHT:
-			h_offset = h_offset + 1
-		elif c == curses.KEY_UP:
-			v_offset = v_offset - 1
-		elif c == curses.KEY_DOWN:
-			v_offset = v_offset + 1
+			h_diff = +1
+		elif c == curses.KEY_UP or c == ord( 'k' ) or c == ord( 'y' ):
+			v_diff = -1
+		elif c == curses.KEY_DOWN or c == ord( 'e' ) or c == ord( 'j' ):
+			v_diff = +1
+		elif c == ord( 'E' ) or c == ord( 'J' ):
+			v_diff = +1
+			past = True
+		elif c == ord( 'K' ) or c == ord( 'Y' ):
+			v_diff = -1
+			past = True
 		elif c == ord( 'b' ):
-			v_offset = v_offset - display_height
-		elif c == ord( ' ' ):
-			v_offset = v_offset + display_height
+			v_diff = -display_height
+		elif c == ord( ' ' ) or c == ord( 'f' ):
+			v_diff = +display_height
 		elif c == ord( 'd' ):
-			v_offset = v_offset + display_height // 2
+			v_diff = +display_height // 2
 		elif c == ord( 'u' ):
-			v_offset = v_offset - display_height // 2
-		elif c == ord( 'f' ):
+			v_diff = -display_height // 2
+		elif c == ord( 'g' ):
+			v_offset = 0
+		elif c == ord( 'G' ):
+			v_offset = 0
+			v_diff = sys.maxsize
+		elif c == ord( 'F' ):
 			v_end = not v_end
 except KeyboardInterrupt:
 	pass
@@ -175,5 +205,3 @@ finally:
 	stdscr.keypad( False )
 	curses.echo()
 	curses.endwin()
-
-
