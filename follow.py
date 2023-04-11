@@ -131,7 +131,7 @@ try:
 				line_len = len( line )
 				if line_len <= h_offset:
 					continue
-				h_end = min( line_len - h_start, h_offset + display_width )
+				h_end = min( line_len, h_offset + display_width )
 				try:
 					stdscr.addstr( v_disp_off + num + title_height, h_disp_off, line[h_start:h_end] )
 				except:
@@ -157,6 +157,8 @@ try:
 
 		# Reset these ones
 		elapsed = False
+		v_diff = 0
+		h_diff = 0
 		past = False
 
 		# Get one character from STDIN
@@ -165,7 +167,7 @@ try:
 		# Handle key
 		if c == -1:
 			elapsed = last
-		elif c == ord( 'r' ) or c == ord( 'R' );
+		elif c == ord( 'r' ) or c == ord( 'R' ):
 			elapsed = True
 		elif c == ord( 'q' ):
 			raise KeyboardInterrupt
