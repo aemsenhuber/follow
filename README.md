@@ -27,11 +27,15 @@
 <dd>Move one column to the left</dd>
 <dt>RIGHT ARROW</dt>
 <dd>Move one column to the right</dd>
-<dt>DOWN ARROW</dt>
+<dt>DOWN ARROW, e, j</dt>
 <dd>Move one row downwards</dd>
-<dt>UP ARROW</dt>
+<dt>UP ARROW, k, y</dt>
 <dd>Move one row upwards</dd>
-<dt>SPACE</dt>
+<dt>E, J</dt>
+<dd>Move one row downwards (allow movement past the bottom of the output)</dd>
+<dt>K, Y</dt>
+<dd>Move one row upwards (allow movement past the top of the output)</dd>
+<dt>SPACE, f</dt>
 <dd>Move screen height downwards</dd>
 <dt>b</dt>
 <dd>Move screen height upwards</dd>
@@ -39,6 +43,12 @@
 <dd>Move one half screen height downwards</dd>
 <dt>u</dt>
 <dd>Move one half screen height upwards</dd>
+<dt>g</dt>
+<dd>Go to top</dd>
+<dt>G</dt>
+<dd>Go to bottom</dd>
+<dt>F</dt>
+<dd>Remain at then bottom, even when the height changes (a repeat switches off that mode)</dd>
 <dt>q, ^c</dt>
 <dd>Exit the program.</dd>
 </dl>
