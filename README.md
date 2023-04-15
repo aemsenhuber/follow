@@ -36,9 +36,9 @@
 <dt>K, Y</dt>
 <dd>Move one row upwards (allow movement past the top of the output)</dd>
 <dt>SPACE, f</dt>
-<dd>Move screen height downwards</dd>
+<dd>Move one screen height downwards</dd>
 <dt>b</dt>
-<dd>Move screen height upwards</dd>
+<dd>Move one screen height upwards</dd>
 <dt>d</dt>
 <dd>Move one half screen height downwards</dd>
 <dt>u</dt>
