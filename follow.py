@@ -43,7 +43,7 @@ command_args = [ args.command ] + args.arguments
 if args.shell:
 	command_args = " ".join( command_args )
 
-title = socket.gethostname() + " " + args.command + " output"
+title = socket.gethostname() + ": " + args.command
 title_height = 1
 title_width = len( title )
 
@@ -58,6 +58,7 @@ res_max_height = 0
 res_max_width = 0
 elapsed = True
 last_time = None
+disp_time = None
 
 v_offset = 0
 h_offset = 0
@@ -68,21 +69,9 @@ past = False
 
 try:
 	while True:
-		stdscr.erase()
-		screen_height, screen_width = stdscr.getmaxyx()
-
-		try:
-			stdscr.addstr( 0, int( ( screen_width - title_width ) / 2. ), title, curses.A_REVERSE )
-		except:
-			pass
-
-		# Size of the zone where the output of the command will be display
-		# One line less because of the title
-		display_height = screen_height - title_height
-		display_width = screen_width
-
 		if elapsed:
 			last_time = time.monotonic()
+			disp_time = time.strftime( "%c" )
 
 			# Execute the command
 			process = subprocess.Popen( command_args, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, shell = args.shell )
@@ -95,6 +84,29 @@ try:
 			# Size of the result in both directions
 			res_max_height = len( res_lines )
 			res_max_width = max( len( line ) for line in res_lines )
+
+		stdscr.erase()
+		screen_height, screen_width = stdscr.getmaxyx()
+
+		try:
+			right_start = screen_width - len( disp_time )
+
+			if right_start > title_width:
+				stdscr.addstr( 0, 0, title, curses.A_REVERSE )
+			elif right_start > 4:
+				stdscr.addstr( 0, 0, title[ :right_start-4 ] + "...", curses.A_REVERSE )
+
+			if right_start >= 0:
+				stdscr.addstr( 0, right_start, disp_time, curses.A_REVERSE )
+			else:
+				stdscr.addstr( 0, 0, disp_time[ -right_start: ], curses.A_REVERSE )
+		except:
+			pass
+
+		# Size of the zone where the output of the command will be display
+		# One line less because of the title
+		display_height = screen_height - title_height
+		display_width = screen_width
 
 		if v_end:
 			v_offset = max( res_max_height - display_height, 0 )
