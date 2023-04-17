@@ -157,15 +157,11 @@ try:
 		new_time = time.monotonic()
 		# Remaining time to wait in seconds
 		rem_time = args.interval - ( new_time - last_time )
-		# Convert into tenths of seconds, which is the unit used by curses.halfdelay()
-		tenths = int( rem_time * 10 + 0.5 )
-		# curses.halfdelay takes a number between 1 and 255
-		if tenths > 255:
-			last = False
-			tenths = 255
-		else:
-			last = True
-		curses.halfdelay( max( tenths, 1 ) )
+		# Convert into milliseconds, which is the unit used by timeout()
+		millis = int( rem_time * 1000 + 0.5 )
+		# Negative value to timeout means "blocking read"; if the we are past target time, we set a zero
+		# timeout, which means non-blocking read.
+		stdscr.timeout( max( millis, 0 ) )
 
 		# Reset these ones
 		elapsed = False
@@ -173,12 +169,12 @@ try:
 		h_diff = 0
 		past = False
 
-		# Get one character from STDIN
+		# Get one character from STDIN (or -1 if timeout elapsed)
 		c = stdscr.getch()
 
 		# Handle key
 		if c == -1:
-			elapsed = last
+			elapsed = True
 		elif c == ord( 'r' ) or c == ord( 'R' ):
 			elapsed = True
 		elif c == ord( 'q' ):
