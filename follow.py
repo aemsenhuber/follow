@@ -56,7 +56,7 @@ stdscr.keypad( True )
 res_lines = None
 res_max_height = 0
 res_max_width = 0
-elapsed = True
+refresh = 2
 last_time = None
 disp_time = None
 
@@ -69,8 +69,13 @@ past = False
 
 try:
 	while True:
-		if elapsed:
-			last_time = time.monotonic()
+		if refresh > 0:
+			if refresh > 1:
+				last_time = time.monotonic()
+			else:
+				last_time = last_time + args.interval
+			refresh = 0
+
 			disp_time = time.strftime( "%c" )
 
 			# Execute the command
@@ -174,9 +179,9 @@ try:
 
 		# Handle key
 		if c == -1:
-			elapsed = True
+			refresh = 1
 		elif c == ord( 'r' ) or c == ord( 'R' ):
-			elapsed = True
+			refresh = 2
 		elif c == ord( 'q' ):
 			raise KeyboardInterrupt
 		elif c == curses.KEY_LEFT:
