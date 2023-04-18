@@ -18,6 +18,7 @@
 
 import sys
 import time
+import locale
 import curses
 import socket
 import subprocess
@@ -29,6 +30,8 @@ def positive_float( value ):
 		return parsed
 	else:
 		raise ValueError( "Value must be strictly positive" )
+
+locale.setlocale( locale.LC_ALL, '' )
 
 parser = argparse.ArgumentParser()
 
