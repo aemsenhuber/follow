@@ -8,12 +8,12 @@
 
 ## Description
 
-**follow** periodically executes the provided command and shows its output on the terminal. It is intended for commands producing a large amount of output by provided a substen of the `less` commands for navigation.
+**follow** periodically executes the provided command and shows its output on the terminal. It is intended for commands producing a large amount of output by providing a subset of the `less` commands for navigation.
 
 ## Options
 
 <dl>
-<dt>--interval SECS, -i SECS</dt>
+<dt>--interval SECS, -n SECS</dt>
 <dd>Update intervals for the command, in seconds.</dd>
 <dt>--shell, -s</dt>
 <dd>Execute the command through a shell, rather than directly.</dd>
