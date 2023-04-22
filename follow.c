@@ -158,8 +158,6 @@ int main( int argc, char** argv ) {
 		else exit( 2 );
 	}
 
-	char** command_args = argv + optind;
-
 	char* title = NULL;
 
 	{
@@ -168,12 +166,16 @@ int main( int argc, char** argv ) {
 		int hn_res = gethostname( hostname, sizeof( hostname ) - 1 );
 
 		if ( hn_res == 0 ) {
-			asprintf( &title, "%s: %s", hostname, command_args[ 0 ] );
+			asprintf( &title, "%s: %s", hostname, argv[ optind ] );
 		} else {
-			/* We still need to copy, command_args might be free()d below */
-			asprintf( &title, "%s", command_args[ 0 ] );
+			asprintf( &title, "%s", argv[ optind ] );
 		}
 	}
+
+	/* Prepare the command to execute */
+	/* ------------------------------ */
+
+	char** command_args;
 
 	if ( shell ) {
 		size_t shell_len = argc - optind; /* (n-1) space in between the arguments, plus the final NULL byte */
@@ -198,10 +200,27 @@ int main( int argc, char** argv ) {
 		}
 
 		command_args = malloc( sizeof( char* ) * 4 );
+		if ( command_args == NULL ) {
+			perror( "malloc" );
+			exit( EXIT_FAILURE );
+		}
+
 		command_args[0] = "/bin/sh";
 		command_args[1] = "-c";
 		command_args[2] = shell_command;
 		command_args[3] = NULL;
+	} else {
+		size_t argn = argc - optind;
+		command_args = malloc( sizeof( char* ) * ( argn + 1 ) );
+		if ( command_args == NULL ) {
+			perror( "malloc" );
+			exit( EXIT_FAILURE );
+		}
+
+		for ( int argi = 0; argi < argn; argi++ ) {
+			command_args[argi] = argv[optind + argi];
+		}
+		command_args[argn] = NULL;
 	}
 
 	WINDOW* win = initscr();
