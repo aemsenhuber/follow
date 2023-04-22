@@ -12,6 +12,7 @@
 #include <limits.h> /* For PIPE_BUF */
 #include <errno.h>
 
+#include <time.h>
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
@@ -126,6 +127,53 @@ char* get_command_output( char** command_args ) {
 	return ret;
 }
 
+/**
+ * Get the left part of the title line.
+ *
+ * This is just the current time.
+ */
+char* get_title_left( char* command ) {
+	char hostname[1025];
+	memset( hostname, '\0', sizeof( hostname ) );
+	int hn_res = gethostname( hostname, sizeof( hostname ) - 1 );
+
+	char* ret = NULL;
+	if ( hn_res == 0 ) {
+		asprintf( &ret, "%s: %s", hostname, command );
+	} else {
+		asprintf( &ret, "%s", command );
+	}
+
+	return ret;
+}
+
+/**
+ * Get the right part of the title line.
+ *
+ * This is just the current time.
+ */
+char* get_title_right() {
+	time_t t = time( NULL );
+
+	struct tm loct;
+	if ( localtime_r( &t, &loct ) == NULL ) {
+		return NULL;
+	}
+
+	char* ret = calloc( 256, 1 );
+	if ( ret == NULL ) {
+		return NULL;
+	}
+
+	int res = strftime( ret, 255, "%c", &loct );
+	if ( res == 0 ) {
+		free( ret );
+		return NULL;
+	} else {
+		return ret;
+	}
+}
+
 int main( int argc, char** argv ) {
 	int help = 0;
 	int interval = 1;
@@ -156,20 +204,6 @@ int main( int argc, char** argv ) {
 
 		if ( help ) exit( EXIT_SUCCESS );
 		else exit( 2 );
-	}
-
-	char* title = NULL;
-
-	{
-		char hostname[1025];
-		memset( hostname, '\0', sizeof( hostname ) );
-		int hn_res = gethostname( hostname, sizeof( hostname ) - 1 );
-
-		if ( hn_res == 0 ) {
-			asprintf( &title, "%s: %s", hostname, argv[ optind ] );
-		} else {
-			asprintf( &title, "%s", argv[ optind ] );
-		}
 	}
 
 	/* Prepare the command to execute */
@@ -234,17 +268,47 @@ int main( int argc, char** argv ) {
 	int v_offset = 0;
 	int h_offset = 0;
 
-	const int title_len = strlen( title );
-	const int title_height = 1;
-
 	while( cont ) {
+		char* title_left = get_title_left( argv[optind] );
+		char* title_right = get_title_right();
+		char* display_string = get_command_output( command_args );
+
 		werase( win );
 		int screen_height = getmaxy( win );
 		int screen_width = getmaxx( win );
 
+		const int title_left_len = ( title_left == NULL ? 0 : strlen( title_left ) );
+		const int title_right_len = ( title_right == NULL ? 0 : strlen( title_right ) );
+		const int title_height = 1;
+
+		const int right_start = screen_width - title_right_len;
+
 		wattron( win, A_REVERSE );
-		wmove( win, 0, ( screen_width - title_len ) / 2 );
-		waddnstr( win, title, title_len );
+
+		if ( title_left != NULL ) {
+			wmove( win, 0, 0 );
+			if ( right_start > title_left_len ) {
+				waddnstr( win, title_left, title_left_len );
+			} else if ( right_start > 4 ) {
+				waddnstr( win, title_left, right_start - 4 );
+				waddnstr( win, "...", 3 );
+			}
+
+			free( title_left );
+		}
+
+		if ( title_right != NULL ) {
+			if ( right_start >= 0 ) {
+				wmove( win, 0, right_start );
+				waddnstr( win, title_right, title_right_len );
+			} else {
+				wmove( win, 0, 0 );
+				waddnstr( win, title_right - right_start, screen_width );
+			}
+
+			free( title_right );
+		}
+
 		wattroff( win, A_REVERSE );
 
 		/* Size of the zone where the output of the command will be display */
@@ -256,7 +320,6 @@ int main( int argc, char** argv ) {
 		int res_max_height = 0;
 		int res_max_width = 0;
 
-		char* display_string = get_command_output( command_args );
 		if ( display_string != NULL ) {
 			char* line_start = display_string;
 			char* cur_pos = display_string;

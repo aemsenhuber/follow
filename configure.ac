@@ -32,6 +32,7 @@ AC_CHECK_FUNCS([memset])
 AC_CHECK_FUNCS([strndup])
 AC_CHECK_FUNCS([strtol])
 AC_CHECK_FUNCS([gethostname])
+AC_CHECK_FUNCS([localtime_r])
 AC_CHECK_FUNCS([dup2])
 
 # NCURSES
