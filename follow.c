@@ -2,15 +2,17 @@
 #include "config.h"
 #endif
 
-#ifdef HAVE_STRING_H
-#include <string.h>
-#endif
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
+#ifdef HAVE_STRING_H
+#include <string.h>
+#endif
+#include <wchar.h>
 
 #include <limits.h> /* For PIPE_BUF */
 #include <errno.h>
+#include <locale.h>
 
 #include <time.h>
 #ifdef HAVE_UNISTD_H
@@ -81,7 +83,7 @@ int run_command( char* const* args, int* fd )  {
 	}
 }
 
-int get_command_output( char** command_args, char** display_string, size_t* display_alloc ) {
+size_t get_command_output( char** command_args, char** output_buf, size_t* output_alloc ) {
 	int fd;
 	int pid = run_command( command_args, &fd );
 
@@ -92,15 +94,15 @@ int get_command_output( char** command_args, char** display_string, size_t* disp
 	int err = 0;
 
 	for (;;) {
-		if ( *display_alloc < len + PIPE_BUF ) {
-			char* new = (char*) realloc( (void*) *display_string, len + PIPE_BUF + 1 );
+		if ( ( *output_alloc ) < len + PIPE_BUF ) {
+			char* new = (char*) realloc( (void*)( *output_buf ), len + PIPE_BUF + 1 );
 
 			if ( new == NULL ) {
 				err = 1;
 			} else {
 				new[len + PIPE_BUF] = '\0'; /* ensure the buffer is NUL terminated */
-				*display_string = new;
-				*display_alloc = len + PIPE_BUF;
+				( *output_buf ) = new;
+				( *output_alloc ) = len + PIPE_BUF;
 			}
 		}
 
@@ -110,14 +112,14 @@ int get_command_output( char** command_args, char** display_string, size_t* disp
 			char buf[PIPE_BUF];
 			nread = read( fd, buf, PIPE_BUF );
 		} else {
-			nread = read( fd, *display_string + len, *display_alloc - len );
+			nread = read( fd, ( *output_buf ) + len, ( *output_alloc ) - len );
 		}
 
 		if ( nread == -1 ) {
 			if ( errno == EINTR ) continue;
 			break;
 		} else if ( nread == 0 ) {
-			( *display_string )[len] = '\0'; /* ensure the current output is NUL terminated */
+			( *output_buf )[len] = '\0'; /* ensure the current output is NUL terminated */
 			close( fd );
 			break;
 		} else if ( !err ) {
@@ -127,36 +129,52 @@ int get_command_output( char** command_args, char** display_string, size_t* disp
 
 	waitpid( pid, NULL, 0 );
 
-	return err ? -1 : len;
+	return err ? (size_t) -1 : len;
 }
 
 /**
  * Convert the raw output from a command into an array of lines while counting its width and height.
  */
-void convert_output( int output_len, char* output_buf, int* res_max_height, int* res_max_width, size_t* lines_alloc, char*** lines, int** lines_len ) {
+void convert_output( size_t output_len, char* output_buf, size_t* display_len, size_t* display_alloc, wchar_t** display_buf, int* res_max_height, int* res_max_width, size_t* lines_alloc, wchar_t*** lines, int** lines_len ) {
 	( *res_max_height ) = 0;
 	( *res_max_width ) = 0;
 
-	if ( output_len < 0 ) return;
+	if ( output_len == ( size_t ) -1 ) return;
+
+	/* Allocate wide-character array and zero it */
+	if ( output_len + 1 > ( *display_alloc ) ) {
+		wchar_t* new = ( wchar_t* ) realloc( ( void* )( *display_buf ), sizeof( wchar_t ) * ( output_len + 1 ) );
+		if ( new != NULL ) {
+			( *display_buf ) = new;
+			( *display_alloc ) = output_len + 1;
+		}
+	}
+	memset( ( *display_buf ), 0, sizeof( wchar_t ) * ( *display_alloc ) );
+
+	/* Decode into wide-character string */
+	mbstate_t ps;
+	memset( &ps, 0, sizeof( ps ) );
+	char* output_start = output_buf;
+	( *display_len ) = mbsnrtowcs( ( *display_buf ), (const char** restrict) &output_start, output_len, ( *display_alloc ), &ps );
+	if ( ( *display_len ) == ( size_t ) -1 ) return;
 
 	/* Split the result into lines */
-	char* line_start = output_buf;
-	char* cur_pos = output_buf;
+	wchar_t* line_start = *display_buf;
+	wchar_t* cur_pos = *display_buf;
 
 	while( 1 ) {
-		char c = *cur_pos;
-		if ( c == '\n' || c == '\0' ) {
+		wchar_t c = *cur_pos;
+		if ( c == L'\n' || c == L'\0' ) {
 			const size_t line_len = cur_pos - line_start;
 
 			if ( line_len > ( *res_max_width ) ) {
 				( *res_max_width ) = line_len;
 			}
 
-			*cur_pos = '\0';
-			if ( c == '\n' || line_len > 0 ) {
+			if ( c == L'\n' || line_len > 0 ) {
 				if ( ( *res_max_height ) + 1 > ( *lines_alloc ) ) {
-					( *lines ) = realloc( ( void* )( *lines ), sizeof( char* ) * ( *res_max_height ) + 1 );
-					( *lines_len ) = realloc( ( void* )( *lines_len ), sizeof( int* ) * ( *res_max_height ) + 1 );
+					( *lines ) = realloc( ( void* )( *lines ), sizeof( wchar_t* ) * ( ( *res_max_height ) + 1 ) );
+					( *lines_len ) = realloc( ( void* )( *lines_len ), sizeof( int* ) * ( ( *res_max_height ) + 1 ) );
 					( *lines_alloc ) = ( *res_max_height ) + 1;
 				}
 
@@ -165,7 +183,7 @@ void convert_output( int output_len, char* output_buf, int* res_max_height, int*
 				( *res_max_height )++;
 			}
 
-			if ( c == '\0' ) {
+			if ( c == L'\0' ) {
 				break;
 			} else {
 				line_start = cur_pos + 1;
@@ -214,45 +232,24 @@ long int diff_timespec( const struct timespec* left, const struct timespec* righ
 }
 
 /**
- * Get the left part of the title line.
- *
- * This is just the current time.
+ * Convert a multibyte string into a newly-allocated wide-character string
  */
-char* get_title_left( char* command ) {
-	char hostname[1025];
-	memset( hostname, '\0', sizeof( hostname ) );
-	int hn_res = gethostname( hostname, sizeof( hostname ) - 1 );
+wchar_t* mbtowca( char* buf, size_t len ) {
+	mbstate_t ps;
+	memset( &ps, 0, sizeof( ps ) );
 
-	char* ret = NULL;
-	if ( hn_res == 0 ) {
-		asprintf( &ret, "%s: %s", hostname, command );
-	} else {
-		asprintf( &ret, "%s", command );
-	}
+	char* start = buf;
+	size_t wclen = mbsnrtowcs( NULL, (const char** restrict) &start, len, 0, &ps );
+	if ( wclen == ( size_t ) -1 ) return NULL;
 
-	return ret;
-}
+	wchar_t* ret = calloc( wclen + 1, sizeof( wchar_t ) );
+	if ( ret == NULL ) return NULL;
 
-/**
- * Get the right part of the title line.
- *
- * This is just the current time.
- */
-char* get_title_right() {
-	time_t t = time( NULL );
+	memset( &ps, 0, sizeof( ps ) );
+	start = buf;
+	wclen = mbsnrtowcs( ret, (const char** restrict) &start, len, wclen + 1, &ps );
 
-	struct tm loct;
-	if ( localtime_r( &t, &loct ) == NULL ) {
-		return NULL;
-	}
-
-	char* ret = calloc( 256, 1 );
-	if ( ret == NULL ) {
-		return NULL;
-	}
-
-	int res = strftime( ret, 255, "%c", &loct );
-	if ( res == 0 ) {
+	if ( wclen == ( size_t ) -1 ) {
 		free( ret );
 		return NULL;
 	} else {
@@ -260,7 +257,58 @@ char* get_title_right() {
 	}
 }
 
+/**
+ * Get the left part of the title line.
+ *
+ * This is just the current time.
+ */
+wchar_t* get_title_left( char* command ) {
+	char hostname[1025];
+	memset( hostname, '\0', sizeof( hostname ) );
+	int hn_res = gethostname( hostname, sizeof( hostname ) - 1 );
+
+	char buf[512];
+	memset( buf, '\0', sizeof( buf ) );
+	int res;
+	if ( hn_res == 0 ) {
+		res = snprintf( buf, sizeof( buf ), "%s: %s", hostname, command );
+	} else {
+		res = snprintf( buf, sizeof( buf ), "%s", command );
+	}
+
+	if ( res == -1 ) {
+		return NULL;
+	}
+
+	return mbtowca( buf, MIN( res, sizeof( buf ) ) );
+}
+
+/**
+ * Get the right part of the title line.
+ *
+ * This is just the current time.
+ */
+wchar_t* get_title_right() {
+	time_t t = time( NULL );
+
+	struct tm loct;
+	if ( localtime_r( &t, &loct ) == NULL ) {
+		return NULL;
+	}
+
+	char buf[512];
+	memset( buf, '\0', sizeof( buf ) );
+	int res = strftime( buf, sizeof( buf ), "%c", &loct );
+	if ( res == 0 ) {
+		return NULL;
+	}
+
+	return mbtowca( buf, res );
+}
+
 int main( int argc, char** argv ) {
+	setlocale( LC_ALL, "" );
+
 	int help = 0;
 	int interval = 1;
 	int shell = 0;
@@ -353,15 +401,18 @@ int main( int argc, char** argv ) {
 	struct timespec next_timer = { 0, 0 };
 	struct timespec inter_timer = { interval, 0 };
 
-	char* title_left = NULL;
-	char* title_right = NULL;
-	int display_len = -1;
+	wchar_t* title_left = NULL;
+	wchar_t* title_right = NULL;
+	size_t output_len = (size_t) -1;
+	size_t output_alloc = 0;
+	char* output_buf = NULL;
+	size_t display_len = (size_t) -1;
 	size_t display_alloc = 0;
-	char* display_string = NULL;
+	wchar_t* display_buf = NULL;
 	int res_max_height = 0;
 	int res_max_width = 0;
 	size_t lines_alloc = 0;
-	char** lines = NULL;
+	wchar_t** lines = NULL;
 	int* lines_len = NULL;
 
 	int v_offset = 0;
@@ -389,16 +440,20 @@ int main( int argc, char** argv ) {
 			title_left = get_title_left( argv[optind] );
 			title_right = get_title_right();
 
-			display_len = get_command_output( command_args, &display_string, &display_alloc );
-			convert_output( display_len, display_string, &res_max_height, &res_max_width, &lines_alloc, &lines, &lines_len );
+			output_len = get_command_output( command_args, &output_buf, &output_alloc );
+			convert_output( output_len, output_buf, &display_len, &display_alloc, &display_buf, &res_max_height, &res_max_width, &lines_alloc, &lines, &lines_len );
 		}
+
+		/* Prepare window for new output */
 
 		werase( win );
 		int screen_height = getmaxy( win );
 		int screen_width = getmaxx( win );
 
-		const int title_left_len = ( title_left == NULL ? 0 : strlen( title_left ) );
-		const int title_right_len = ( title_right == NULL ? 0 : strlen( title_right ) );
+		/* Show header line */
+
+		const size_t title_left_len = ( title_left == NULL ? 0 : wcslen( title_left ) );
+		const size_t title_right_len = ( title_right == NULL ? 0 : wcslen( title_right ) );
 		const int title_height = 1;
 
 		const int right_start = screen_width - title_right_len;
@@ -406,29 +461,27 @@ int main( int argc, char** argv ) {
 		wattron( win, A_REVERSE );
 
 		if ( title_left != NULL ) {
-			wmove( win, 0, 0 );
 			if ( right_start > title_left_len ) {
-				waddnstr( win, title_left, title_left_len );
+				mvwaddnwstr( win, 0, 0, title_left, title_left_len );
 			} else if ( right_start > 4 ) {
-				waddnstr( win, title_left, right_start - 4 );
+				mvwaddnwstr( win, 0, 0, title_left, right_start - 4 );
 				waddnstr( win, "...", 3 );
 			}
 		}
 
 		if ( title_right != NULL ) {
 			if ( right_start >= 0 ) {
-				wmove( win, 0, right_start );
-				waddnstr( win, title_right, title_right_len );
+				mvwaddnwstr( win, 0, right_start, title_right, title_right_len );
 			} else {
-				wmove( win, 0, 0 );
-				waddnstr( win, title_right - right_start, screen_width );
+				mvwaddnwstr( win, 0, 0, title_right - right_start, screen_width );
 			}
 		}
 
 		wattroff( win, A_REVERSE );
 
-		/* Size of the zone where the output of the command will be display */
-		/* One line less because of the title */
+		/* Show command's output */
+
+		/* Size of the zone where the output of the command will be display; take into account the header */
 		int display_height = screen_height - title_height;
 		int display_width = screen_width;
 
@@ -450,7 +503,7 @@ int main( int argc, char** argv ) {
 			h_offset = MIN( h_offset, MAX( h_offset + h_diff, 0 ) );
 		}
 
-		if ( display_len < 0 ) {
+		if ( display_len == (size_t) -1 ) {
 			perror( NULL );
 		} else if ( v_offset > -display_height && v_offset < res_max_height && h_offset > -display_width && h_offset < res_max_width ) {
 			int v_disp_off = MAX( -v_offset, 0 );
@@ -465,12 +518,16 @@ int main( int argc, char** argv ) {
 					continue;
 				}
 				const int h_end = MIN( line_len, h_offset + display_width ) - h_start;
-				wmove( win, v_disp_off + v + title_height, h_disp_off );
-				waddnstr( win, lines[v + v_start] + h_start, h_end );
+
+				if ( h_end > 0 ) {
+					mvwaddnwstr( win, v_disp_off + v + title_height, h_disp_off, lines[v + v_start] + h_start, h_end );
+				}
 			}
 		}
 
 		wrefresh( win );
+
+		/* Wait for either a character to be pressed or timer to elapse */
 
 		struct timespec cur_timer = { 0, 0 };
 		int res = clock_gettime( CLOCK_MONOTONIC, &cur_timer );
