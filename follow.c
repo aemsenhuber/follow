@@ -81,51 +81,98 @@ int run_command( char* const* args, int* fd )  {
 	}
 }
 
-char* get_command_output( char** command_args ) {
+int get_command_output( char** command_args, char** display_string, size_t* display_alloc ) {
 	int fd;
-
 	int pid = run_command( command_args, &fd );
 
 	/* Error in run_command() */
-	if ( pid < 0 ) return NULL;
+	if ( pid < 0 ) return -1;
 
-	char* ret = malloc( 1 );
-	ret[0] = '\0';
 	size_t len = 0;
 	int err = 0;
 
 	for (;;) {
-		char buf[PIPE_BUF];
+		if ( *display_alloc < len + PIPE_BUF ) {
+			char* new = (char*) realloc( (void*) *display_string, len + PIPE_BUF + 1 );
 
-		ssize_t nread = read( fd, buf, PIPE_BUF );
+			if ( new == NULL ) {
+				err = 1;
+			} else {
+				new[len + PIPE_BUF] = '\0'; /* ensure the buffer is NUL terminated */
+				*display_string = new;
+				*display_alloc = len + PIPE_BUF;
+			}
+		}
+
+		ssize_t nread;
+		if ( err ) {
+			/* Discard output */
+			char buf[PIPE_BUF];
+			nread = read( fd, buf, PIPE_BUF );
+		} else {
+			nread = read( fd, *display_string + len, *display_alloc - len );
+		}
 
 		if ( nread == -1 ) {
 			if ( errno == EINTR ) continue;
 			break;
 		} else if ( nread == 0 ) {
+			( *display_string )[len] = '\0'; /* ensure the current output is NUL terminated */
 			close( fd );
 			break;
 		} else if ( !err ) {
-			char* new = (char*) realloc( (void*) ret, len + nread + 1 );
-			if ( new == NULL ) {
-				/* error */
-				/* we won't return anything, but we'll keep consuming the output and wait for the process to exit */
-				free( ret );
-				ret = NULL;
-				err = 1;
-				continue;
-			}
-
-			ret = new;
-			memcpy( ret + len, buf, nread );
-			ret[len + nread] = '\0'; /* ensure it is NUL terminated */
 			len += nread;
 		}
 	}
 
 	waitpid( pid, NULL, 0 );
 
-	return ret;
+	return err ? -1 : len;
+}
+
+/**
+ * Convert the raw output from a command into an array of lines while counting its width and height.
+ */
+void convert_output( int output_len, char* output_buf, int* res_max_height, int* res_max_width, size_t* lines_alloc, char*** lines, int** lines_len ) {
+	( *res_max_height ) = 0;
+	( *res_max_width ) = 0;
+
+	if ( output_len < 0 ) return;
+
+	/* Split the result into lines */
+	char* line_start = output_buf;
+	char* cur_pos = output_buf;
+
+	while( 1 ) {
+		char c = *cur_pos;
+		if ( c == '\n' || c == '\0' ) {
+			const size_t line_len = cur_pos - line_start;
+
+			if ( line_len > ( *res_max_width ) ) {
+				( *res_max_width ) = line_len;
+			}
+
+			*cur_pos = '\0';
+			if ( c == '\n' || line_len > 0 ) {
+				if ( ( *res_max_height ) + 1 > ( *lines_alloc ) ) {
+					( *lines ) = realloc( ( void* )( *lines ), sizeof( char* ) * ( *res_max_height ) + 1 );
+					( *lines_len ) = realloc( ( void* )( *lines_len ), sizeof( int* ) * ( *res_max_height ) + 1 );
+					( *lines_alloc ) = ( *res_max_height ) + 1;
+				}
+
+				( *lines )[*res_max_height] = line_start;
+				( *lines_len )[*res_max_height] = line_len;
+				( *res_max_height )++;
+			}
+
+			if ( c == '\0' ) {
+				break;
+			} else {
+				line_start = cur_pos + 1;
+			}
+		}
+		cur_pos++;
+	}
 }
 
 /**
@@ -308,6 +355,8 @@ int main( int argc, char** argv ) {
 
 	char* title_left = NULL;
 	char* title_right = NULL;
+	int display_len = -1;
+	size_t display_alloc = 0;
 	char* display_string = NULL;
 	int res_max_height = 0;
 	int res_max_width = 0;
@@ -336,51 +385,12 @@ int main( int argc, char** argv ) {
 
 			free( title_left );
 			free( title_right );
-			free( display_string );
-			res_max_height = 0;
-			res_max_width = 0;
 
 			title_left = get_title_left( argv[optind] );
 			title_right = get_title_right();
-			display_string = get_command_output( command_args );
 
-			/* Split the result into lines */
-			if ( display_string != NULL ) {
-				char* line_start = display_string;
-				char* cur_pos = display_string;
-
-				while( 1 ) {
-					char c = *cur_pos;
-					if ( c == '\n' || c == '\0' ) {
-						const size_t line_len = cur_pos - line_start;
-
-						if ( line_len > res_max_width ) {
-							res_max_width = line_len;
-						}
-
-						*cur_pos = '\0';
-
-						if ( c == '\n' || line_len > 0 ) {
-							if ( res_max_height + 1 > lines_alloc ) {
-								lines = realloc( lines, sizeof( char* ) * res_max_height + 1 );
-								lines_len = realloc( lines_len, sizeof( int* ) * res_max_height + 1 );
-								lines_alloc = res_max_height + 1;
-							}
-
-							lines[res_max_height] = line_start;
-							lines_len[res_max_height] = line_len;
-							res_max_height++;
-						}
-
-						if ( c == '\0' ) {
-							break;
-						} else {
-							line_start = cur_pos + 1;
-						}
-					}
-					cur_pos++;
-				}
-			}
+			display_len = get_command_output( command_args, &display_string, &display_alloc );
+			convert_output( display_len, display_string, &res_max_height, &res_max_width, &lines_alloc, &lines, &lines_len );
 		}
 
 		werase( win );
@@ -440,7 +450,9 @@ int main( int argc, char** argv ) {
 			h_offset = MIN( h_offset, MAX( h_offset + h_diff, 0 ) );
 		}
 
-		if ( display_string != NULL && v_offset > -display_height && v_offset < res_max_height && h_offset > -display_width && h_offset < res_max_width ) {
+		if ( display_len < 0 ) {
+			perror( NULL );
+		} else if ( v_offset > -display_height && v_offset < res_max_height && h_offset > -display_width && h_offset < res_max_width ) {
 			int v_disp_off = MAX( -v_offset, 0 );
 			int v_start = MAX( v_offset, 0 );
 			int h_disp_off = MAX( -h_offset, 0 );
@@ -456,8 +468,6 @@ int main( int argc, char** argv ) {
 				wmove( win, v_disp_off + v + title_height, h_disp_off );
 				waddnstr( win, lines[v + v_start] + h_start, h_end );
 			}
-		} else {
-			perror( NULL );
 		}
 
 		wrefresh( win );
