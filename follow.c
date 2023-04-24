@@ -23,18 +23,16 @@
 #ifdef HAVE_FCNTL_H
 #include <fcntl.h>
 #endif
+#include <poll.h>
 
 #include <ncurses.h>
 
 
 int run_command( char* const* args, int* fd )  {
-	const char* name = args[0];
-
 	int pipefds[2];
 	int piperes = pipe( pipefds );
 	if ( piperes == -1 ) {
-		perror( "pipe" );
-		return -3;
+		return -1;
 	}
 
 	pid_t pid = fork();
@@ -67,7 +65,7 @@ int run_command( char* const* args, int* fd )  {
 		close( pipefds[1] );
 
 		/* the following never returns, except if an error occurred */
-		execvp( name, args );
+		execvp( args[0], args );
 		perror( "execvp" );
 		exit( 1 );
 	} else {
@@ -77,59 +75,56 @@ int run_command( char* const* args, int* fd )  {
 		/* Do not share the file descriptor across multiple chidren processes */
 		fcntl( pipefds[0], F_SETFD, FD_CLOEXEC );
 
+		/* Non-blocking mode */
+		fcntl( pipefds[0], F_SETFL, O_NONBLOCK );
+
 		*fd = pipefds[0];
 
 		return pid;
 	}
 }
 
-size_t get_command_output( char** command_args, char** output_buf, size_t* output_alloc ) {
-	int fd;
-	int pid = run_command( command_args, &fd );
-
-	/* Error in run_command() */
-	if ( pid < 0 ) return -1;
-
-	size_t len = 0;
-	int err = 0;
-
+int get_command_output( pid_t* pid, int* fd, int* output_err, size_t* output_len, size_t* output_alloc, char** output_buf ) {
 	for (;;) {
-		if ( ( *output_alloc ) < len + PIPE_BUF ) {
-			char* new = (char*) realloc( (void*)( *output_buf ), len + PIPE_BUF + 1 );
+		if ( ( *output_alloc ) < ( *output_len ) + PIPE_BUF ) {
+			char* new = (char*) realloc( (void*)( *output_buf ), ( *output_len ) + PIPE_BUF + 1 );
 
 			if ( new == NULL ) {
-				err = 1;
+				( *output_err ) = errno;
 			} else {
-				new[len + PIPE_BUF] = '\0'; /* ensure the buffer is NUL terminated */
+				new[( *output_len ) + PIPE_BUF] = '\0'; /* ensure the buffer is NUL terminated */
 				( *output_buf ) = new;
-				( *output_alloc ) = len + PIPE_BUF;
+				( *output_alloc ) = ( *output_len ) + PIPE_BUF;
 			}
 		}
 
 		ssize_t nread;
-		if ( err ) {
+		if ( ( *output_err ) ) {
 			/* Discard output */
 			char buf[PIPE_BUF];
-			nread = read( fd, buf, PIPE_BUF );
+			nread = read( ( *fd ), buf, PIPE_BUF );
 		} else {
-			nread = read( fd, ( *output_buf ) + len, ( *output_alloc ) - len );
+			nread = read( ( *fd ), ( *output_buf ) + ( *output_len ), ( *output_alloc ) - ( *output_len ) );
 		}
 
 		if ( nread == -1 ) {
-			if ( errno == EINTR ) continue;
-			break;
+			if ( errno == EINTR ) return 0;
+			if ( errno == EAGAIN ) return 0;
+			( *output_err ) = errno;
 		} else if ( nread == 0 ) {
-			( *output_buf )[len] = '\0'; /* ensure the current output is NUL terminated */
-			close( fd );
+			( *output_buf )[( *output_len )] = '\0'; /* ensure the current output is NUL terminated */
+			close( *fd );
+			( *fd ) = -1;
 			break;
-		} else if ( !err ) {
-			len += nread;
+		} else if ( !( *output_err ) ) {
+			( *output_len ) += nread;
 		}
 	}
 
-	waitpid( pid, NULL, 0 );
+	waitpid( ( *pid ), NULL, 0 );
+	( *pid ) = -1;
 
-	return err ? (size_t) -1 : len;
+	return ( *output_err ) ? -1 : 1;
 }
 
 /**
@@ -395,17 +390,24 @@ int main( int argc, char** argv ) {
 	noecho();
 	curs_set( 0 );
 	keypad( win, 1 );
+	nodelay( win, 1 );
 
 	int cont = 1;
 	int refresh = 2;
+	int cmd_pid = -1;
+	int cmd_fd = -1;
 	struct timespec next_timer = { 0, 0 };
 	struct timespec inter_timer = { interval, 0 };
 
-	wchar_t* title_left = NULL;
-	wchar_t* title_right = NULL;
+	wchar_t* cmd_title_left = NULL;
+	wchar_t* cmd_title_right = NULL;
+	int output_err = 0;
 	size_t output_len = (size_t) -1;
 	size_t output_alloc = 0;
 	char* output_buf = NULL;
+	wchar_t* display_title_left = NULL;
+	wchar_t* display_title_right = NULL;
+	int display_err = -1;
 	size_t display_len = (size_t) -1;
 	size_t display_alloc = 0;
 	wchar_t* display_buf = NULL;
@@ -423,7 +425,7 @@ int main( int argc, char** argv ) {
 	int past = 0;
 
 	while( cont ) {
-		if ( refresh ) {
+		if ( refresh && cmd_pid < 0 ) {
 			if ( refresh == 2 ) {
 				int res = clock_gettime( CLOCK_MONOTONIC, &next_timer );
 				if ( res < 0 ) {
@@ -434,14 +436,22 @@ int main( int argc, char** argv ) {
 			add_timespec( &next_timer, &inter_timer );
 			refresh = 0;
 
-			free( title_left );
-			free( title_right );
+			cmd_title_left = get_title_left( argv[optind] );
+			cmd_title_right = get_title_right();
 
-			title_left = get_title_left( argv[optind] );
-			title_right = get_title_right();
+			cmd_pid = run_command( command_args, &cmd_fd );
+			if ( cmd_pid < 0 ) {
+				free( display_title_left );
+				free( display_title_right );
 
-			output_len = get_command_output( command_args, &output_buf, &output_alloc );
-			convert_output( output_len, output_buf, &display_len, &display_alloc, &display_buf, &res_max_height, &res_max_width, &lines_alloc, &lines, &lines_len );
+				display_title_left = cmd_title_left;
+				display_title_right = cmd_title_right;
+
+				display_err = errno;
+			}
+
+			output_err = 0;
+			output_len = 0;
 		}
 
 		/* Prepare window for new output */
@@ -452,28 +462,28 @@ int main( int argc, char** argv ) {
 
 		/* Show header line */
 
-		const size_t title_left_len = ( title_left == NULL ? 0 : wcslen( title_left ) );
-		const size_t title_right_len = ( title_right == NULL ? 0 : wcslen( title_right ) );
+		const size_t title_left_len = ( display_title_left == NULL ? 0 : wcslen( display_title_left ) );
+		const size_t title_right_len = ( display_title_right == NULL ? 0 : wcslen( display_title_right ) );
 		const int title_height = 1;
 
 		const int right_start = screen_width - title_right_len;
 
 		wattron( win, A_REVERSE );
 
-		if ( title_left != NULL ) {
+		if ( display_title_left != NULL ) {
 			if ( right_start > title_left_len ) {
-				mvwaddnwstr( win, 0, 0, title_left, title_left_len );
+				mvwaddnwstr( win, 0, 0, display_title_left, title_left_len );
 			} else if ( right_start > 4 ) {
-				mvwaddnwstr( win, 0, 0, title_left, right_start - 4 );
+				mvwaddnwstr( win, 0, 0, display_title_left, right_start - 4 );
 				waddnstr( win, "...", 3 );
 			}
 		}
 
-		if ( title_right != NULL ) {
+		if ( display_title_right != NULL ) {
 			if ( right_start >= 0 ) {
-				mvwaddnwstr( win, 0, right_start, title_right, title_right_len );
+				mvwaddnwstr( win, 0, right_start, display_title_right, title_right_len );
 			} else {
-				mvwaddnwstr( win, 0, 0, title_right - right_start, screen_width );
+				mvwaddnwstr( win, 0, 0, display_title_right - right_start, screen_width );
 			}
 		}
 
@@ -503,8 +513,9 @@ int main( int argc, char** argv ) {
 			h_offset = MIN( h_offset, MAX( h_offset + h_diff, 0 ) );
 		}
 
-		if ( display_len == (size_t) -1 ) {
-			perror( NULL );
+		if ( display_err != 0 ) {
+			/* display_err is negative before the first command finishes; don't display anything during that time */
+			if ( display_err > 0 ) mvwaddstr( win, 1, 0, strerror( display_err ) );
 		} else if ( v_offset > -display_height && v_offset < res_max_height && h_offset > -display_width && h_offset < res_max_width ) {
 			int v_disp_off = MAX( -v_offset, 0 );
 			int v_start = MAX( v_offset, 0 );
@@ -536,7 +547,38 @@ int main( int argc, char** argv ) {
 			exit( EXIT_FAILURE );
 		}
 
-		wtimeout( win, diff_timespec( &next_timer, &cur_timer, 3 ) );
+		struct pollfd fd_desc[2];
+		fd_desc[0].fd = STDIN_FILENO;
+		fd_desc[0].events = POLLIN;
+		fd_desc[0].revents = 0;
+		fd_desc[1].fd = cmd_fd;
+		fd_desc[1].events = POLLIN;
+		fd_desc[1].revents = 0;
+
+		/* If the command is executing, we do not set a timer, because there is no point starting a new call before the current one finishes */
+		/* Rather, we wait for the command result */
+		int timeout = cmd_pid > 0 ? -1 : diff_timespec( &next_timer, &cur_timer, 3 );
+
+		int pres = poll( fd_desc, 2, timeout );
+
+		if ( pres == 0 && refresh == 0 ) refresh = 1;
+
+		if ( fd_desc[1].revents ) {
+			int finished = get_command_output( &cmd_pid, &cmd_fd, &output_err, &output_len, &output_alloc, &output_buf );
+
+			if ( finished != 0 ) {
+				free( display_title_left );
+				free( display_title_right );
+
+				display_title_left = cmd_title_left;
+				display_title_right = cmd_title_right;
+
+				display_err = output_err;
+				if ( output_err == 0 ) {
+					convert_output( output_len, output_buf, &display_len, &display_alloc, &display_buf, &res_max_height, &res_max_width, &lines_alloc, &lines, &lines_len );
+				}
+			}
+		}
 
 		/* Reset these ones */
 		v_diff = 0;
@@ -608,9 +650,6 @@ int main( int argc, char** argv ) {
 			break;
 		case 'F':
 			v_end = 1;
-			break;
-		case ERR:
-			refresh = 1;
 			break;
 		default:
 			break;
