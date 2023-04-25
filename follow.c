@@ -111,6 +111,9 @@ int get_command_output( pid_t* pid, int* fd, int* output_err, size_t* output_len
 			if ( errno == EINTR ) return 0;
 			if ( errno == EAGAIN ) return 0;
 			( *output_err ) = errno;
+			close( *fd );
+			( *fd ) = -1;
+			break;
 		} else if ( nread == 0 ) {
 			( *output_buf )[( *output_len )] = '\0'; /* ensure the current output is NUL terminated */
 			close( *fd );
@@ -124,7 +127,7 @@ int get_command_output( pid_t* pid, int* fd, int* output_err, size_t* output_len
 	waitpid( ( *pid ), NULL, 0 );
 	( *pid ) = -1;
 
-	return ( *output_err ) ? -1 : 1;
+	return 1;
 }
 
 /**
