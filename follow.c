@@ -18,6 +18,7 @@
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
+#include <getopt.h>
 #include <sys/param.h> /* For MIN(), MAX() */
 #include <sys/wait.h>
 #ifdef HAVE_FCNTL_H
@@ -192,6 +193,34 @@ void convert_output( size_t output_len, char* output_buf, size_t* display_len, s
 }
 
 /**
+ * Parse a string to a timespec, checking for errors.
+ *
+ * If any error occurs, the program is aborted.
+ */
+void safe_parse_positive_timespec( char* str, struct timespec* res ) {
+	if ( str == NULL || *str == '\0' ) {
+		fprintf( stderr, "follow: missing argument value\n" );
+		exit( 2 );
+	}
+
+	char* endptr = NULL;
+	double seconds = strtod( str, &endptr );
+
+	if ( *endptr != '\0' ) {
+		fprintf( stderr, "follow: invalid argument value '%s'\n", str );
+		exit( 2 );
+	}
+
+	if ( seconds <= 0 ) {
+		fprintf( stderr, "follow: argument value not positive '%s'\n", str );
+		exit( 2 );
+	}
+
+	res->tv_sec = (time_t) seconds;
+	res->tv_nsec = (long) ( ( seconds - res->tv_sec ) * 1000000000 );
+}
+
+/**
  * Add two timespec's in place
  */
 void add_timespec( struct timespec* base, const struct timespec* add ) {
@@ -307,35 +336,42 @@ wchar_t* get_title_right() {
 int main( int argc, char** argv ) {
 	setlocale( LC_ALL, "" );
 
-	int help = 0;
-	int interval = 1;
-	int shell = 0;
-
 	/* Parse command line */
 	/* ------------------ */
 
+	int help = 0;
+	int shell = 0;
+	struct timespec interval = { 1, 0 };
+
+	static struct option long_options[] = {
+		{ "help", 0, NULL, 'h' },
+		{ "interval", 1, NULL, 'n' },
+		{ "shell", 0, NULL, 's' },
+		{ 0, 0, NULL, 0 }
+	};
+
 	while ( 1 ) {
-		int opt = getopt( argc, argv, "++hns" );
+		int opt = getopt_long( argc, argv, "++hn:s", long_options, NULL );
 		if ( opt < 0 ) break;
 		if ( opt == '?' ) exit( 2 );
 		if ( opt == 'h' ) help++;
-		if ( opt == 'n' ) interval++;
+		if ( opt == 'n' ) safe_parse_positive_timespec( optarg, &interval );
 		if ( opt == 's' ) shell++;
 	}
 
 	if ( help || argc - optind < 1 ) {
-#define HELP_MESSAGE \
-	"Usage: %s [OPTION...] [--] <command> [arg...]\n" \
-	"\n" \
-	"Program options:\n" \
-	"  -h --help         Display this help message\n" \
-	"  -n --interval=N   Refresh the command every N seconds\n" \
-	"  -s --shell        Use a shell to execute the command\n"
+		fprintf( stderr, "Usage: %s [OPTION...] [--] <command> [arg...]\n", argv[0] );
 
-		fprintf( stderr, HELP_MESSAGE, argv[0] );
-
-		if ( help ) exit( EXIT_SUCCESS );
-		else exit( 2 );
+		if ( help ) {
+			fputs( "\n", stderr );
+			fputs( "Program options:\n", stderr );
+			fputs( "  -h --help         Display this help message\n", stderr );
+			fputs( "  -n --interval=N   Refresh the command every N seconds\n", stderr );
+			fputs( "  -s --shell        Use a shell to execute the command\n", stderr );
+			exit( EXIT_SUCCESS );
+		} else {
+			exit( 2 );
+		}
 	}
 
 	/* Prepare the command to execute */
@@ -400,7 +436,6 @@ int main( int argc, char** argv ) {
 	int cmd_pid = -1;
 	int cmd_fd = -1;
 	struct timespec next_timer = { 0, 0 };
-	struct timespec inter_timer = { interval, 0 };
 
 	wchar_t* cmd_title_left = NULL;
 	wchar_t* cmd_title_right = NULL;
@@ -436,7 +471,7 @@ int main( int argc, char** argv ) {
 					exit( EXIT_FAILURE );
 				}
 			}
-			add_timespec( &next_timer, &inter_timer );
+			add_timespec( &next_timer, &interval );
 			refresh = 0;
 
 			cmd_title_left = get_title_left( argv[optind] );
