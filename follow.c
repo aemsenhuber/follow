@@ -221,6 +221,25 @@ void safe_parse_positive_timespec( char* str, struct timespec* res ) {
 }
 
 /**
+ * Safely retrieve the value of the monotonic clock.
+ *
+ * The program is aborted if an error occurs.
+ */
+void safe_monotonic_clock( struct timespec* timer ) {
+	int res = clock_gettime( CLOCK_MONOTONIC, timer );
+
+	if ( res < 0 ) {
+		/* An error occurred, resert ncurses */
+		echo();
+		endwin();
+
+		/* Abort */
+		perror( "clock_gettime" );
+		exit( EXIT_FAILURE );
+	}
+}
+
+/**
  * Add two timespec's in place
  */
 void add_timespec( struct timespec* base, const struct timespec* add ) {
@@ -425,7 +444,19 @@ int main( int argc, char** argv ) {
 		command_args[argn] = NULL;
 	}
 
+	/* Check that we are connected to a tty */
+	/* ------------------------------------ */
+
+	if ( !isatty( STDIN_FILENO ) || !isatty( STDOUT_FILENO ) ) {
+		fputs( "Standard input and standard output need to be connected to a TTY\n", stderr );
+		exit( EXIT_FAILURE );
+	}
+
+	/* Initialise ncurses */
+	/* ------------------ */
+
 	WINDOW* win = initscr();
+	if ( win == NULL ) exit( EXIT_FAILURE );
 	noecho();
 	curs_set( 0 );
 	keypad( win, 1 );
@@ -465,11 +496,7 @@ int main( int argc, char** argv ) {
 	while( cont ) {
 		if ( refresh && cmd_pid < 0 ) {
 			if ( refresh == 2 ) {
-				int res = clock_gettime( CLOCK_MONOTONIC, &next_timer );
-				if ( res < 0 ) {
-					perror( "clock_gettime" );
-					exit( EXIT_FAILURE );
-				}
+				safe_monotonic_clock( &next_timer );
 			}
 			add_timespec( &next_timer, &interval );
 			refresh = 0;
@@ -579,11 +606,7 @@ int main( int argc, char** argv ) {
 		/* Wait for either a character to be pressed or timer to elapse */
 
 		struct timespec cur_timer = { 0, 0 };
-		int res = clock_gettime( CLOCK_MONOTONIC, &cur_timer );
-		if ( res < 0 ) {
-			perror( "clock_gettime" );
-			exit( EXIT_FAILURE );
-		}
+		safe_monotonic_clock( &cur_timer );
 
 		struct pollfd fd_desc[2];
 		fd_desc[0].fd = STDIN_FILENO;
