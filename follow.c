@@ -2,12 +2,8 @@
 #include "config.h"
 #endif
 
-#ifdef HAVE_STDLIB_H
 #include <stdlib.h>
-#endif
-#ifdef HAVE_STRING_H
 #include <string.h>
-#endif
 #include <wchar.h>
 
 #include <limits.h> /* For PIPE_BUF */
@@ -15,15 +11,11 @@
 #include <locale.h>
 
 #include <time.h>
-#ifdef HAVE_UNISTD_H
 #include <unistd.h>
-#endif
 #include <getopt.h>
 #include <sys/param.h> /* For MIN(), MAX() */
 #include <sys/wait.h>
-#ifdef HAVE_FCNTL_H
 #include <fcntl.h>
-#endif
 #include <poll.h>
 
 #include <ncurses.h>

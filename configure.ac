@@ -13,11 +13,13 @@ AC_USE_SYSTEM_EXTENSIONS
 # Programs
 AC_PROG_CC
 
+# Language features
+AC_C_RESTRICT
+
 # Headers
-AC_CHECK_HEADERS([stdlib.h])
-AC_CHECK_HEADERS([string.h])
 AC_CHECK_HEADERS([unistd.h])
 AC_CHECK_HEADERS([fcntl.h])
+AC_CHECK_HEADERS([sys/param.h])
 
 # Types
 AC_TYPE_PID_T
@@ -29,10 +31,13 @@ AC_FUNC_MALLOC
 AC_FUNC_REALLOC
 AC_FUNC_FORK
 AC_CHECK_FUNCS([memset])
+AC_CHECK_FUNCS([setlocale])
+AC_CHECK_FUNCS([strerror])
 AC_CHECK_FUNCS([strndup])
-AC_CHECK_FUNCS([strtol])
+AC_FUNC_STRTOD
 AC_CHECK_FUNCS([gethostname])
 AC_CHECK_FUNCS([localtime_r])
+AC_CHECK_FUNCS([clock_gettime])
 AC_CHECK_FUNCS([dup2])
 
 # NCURSES
