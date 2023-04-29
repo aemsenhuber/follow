@@ -344,6 +344,37 @@ wchar_t* get_title_right() {
 	return mbtowca( buf, res );
 }
 
+int show_title( WINDOW* win, int screen_width, wchar_t* const display_title_left, wchar_t* const display_title_right ) {
+	const size_t title_left_len = ( display_title_left == NULL ? 0 : wcslen( display_title_left ) );
+	const size_t title_right_len = ( display_title_right == NULL ? 0 : wcslen( display_title_right ) );
+	const int title_height = 1;
+
+	const int right_start = screen_width - title_right_len;
+
+	wattron( win, A_REVERSE );
+
+	if ( display_title_left != NULL ) {
+		if ( right_start > title_left_len ) {
+			mvwaddnwstr( win, 0, 0, display_title_left, title_left_len );
+		} else if ( right_start > 4 ) {
+			mvwaddnwstr( win, 0, 0, display_title_left, right_start - 4 );
+			waddnstr( win, "...", 3 );
+		}
+	}
+
+	if ( display_title_right != NULL ) {
+		if ( right_start >= 0 ) {
+			mvwaddnwstr( win, 0, right_start, display_title_right, title_right_len );
+		} else {
+			mvwaddnwstr( win, 0, 0, display_title_right - right_start, screen_width );
+		}
+	}
+
+	wattroff( win, A_REVERSE );
+
+	return title_height;
+}
+
 int main( int argc, char** argv ) {
 	setlocale( LC_ALL, "" );
 
@@ -353,21 +384,24 @@ int main( int argc, char** argv ) {
 	int help = 0;
 	int shell = 0;
 	struct timespec interval = { 1, 0 };
+	int has_title = 1;
 
 	static struct option long_options[] = {
 		{ "help", 0, NULL, 'h' },
 		{ "interval", 1, NULL, 'n' },
 		{ "shell", 0, NULL, 's' },
+		{ "no-title", 0, NULL, 't' },
 		{ 0, 0, NULL, 0 }
 	};
 
 	while ( 1 ) {
-		int opt = getopt_long( argc, argv, "++hn:s", long_options, NULL );
+		int opt = getopt_long( argc, argv, "++hn:st", long_options, NULL );
 		if ( opt < 0 ) break;
 		if ( opt == '?' ) exit( 2 );
 		if ( opt == 'h' ) help++;
 		if ( opt == 'n' ) safe_parse_positive_timespec( optarg, &interval );
 		if ( opt == 's' ) shell++;
+		if ( opt == 't' ) has_title = 0;
 	}
 
 	if ( help || argc - optind < 1 ) {
@@ -379,6 +413,7 @@ int main( int argc, char** argv ) {
 			fputs( "  -h --help         Display this help message\n", stderr );
 			fputs( "  -n --interval=N   Refresh the command every N seconds\n", stderr );
 			fputs( "  -s --shell        Use a shell to execute the command\n", stderr );
+			fputs( "  -t --no-title     Don't show the header line\n", stderr );
 			exit( EXIT_SUCCESS );
 		} else {
 			exit( 2 );
@@ -493,18 +528,21 @@ int main( int argc, char** argv ) {
 			add_timespec( &next_timer, &interval );
 			refresh = 0;
 
-			cmd_title_left = get_title_left( argv[optind] );
-			cmd_title_right = get_title_right();
+			if ( has_title ) {
+				cmd_title_left = get_title_left( argv[optind] );
+				cmd_title_right = get_title_right();
+			}
 
 			cmd_pid = run_command( command_args, &cmd_fd );
+
 			if ( cmd_pid < 0 ) {
+				display_err = errno;
+
 				free( display_title_left );
 				free( display_title_right );
 
 				display_title_left = cmd_title_left;
 				display_title_right = cmd_title_right;
-
-				display_err = errno;
 			}
 
 			output_err = 0;
@@ -519,32 +557,10 @@ int main( int argc, char** argv ) {
 
 		/* Show header line */
 
-		const size_t title_left_len = ( display_title_left == NULL ? 0 : wcslen( display_title_left ) );
-		const size_t title_right_len = ( display_title_right == NULL ? 0 : wcslen( display_title_right ) );
-		const int title_height = 1;
-
-		const int right_start = screen_width - title_right_len;
-
-		wattron( win, A_REVERSE );
-
-		if ( display_title_left != NULL ) {
-			if ( right_start > title_left_len ) {
-				mvwaddnwstr( win, 0, 0, display_title_left, title_left_len );
-			} else if ( right_start > 4 ) {
-				mvwaddnwstr( win, 0, 0, display_title_left, right_start - 4 );
-				waddnstr( win, "...", 3 );
-			}
+		int title_height = 0;
+		if ( has_title ) {
+			title_height = show_title( win, screen_width, display_title_left, display_title_right );
 		}
-
-		if ( display_title_right != NULL ) {
-			if ( right_start >= 0 ) {
-				mvwaddnwstr( win, 0, right_start, display_title_right, title_right_len );
-			} else {
-				mvwaddnwstr( win, 0, 0, display_title_right - right_start, screen_width );
-			}
-		}
-
-		wattroff( win, A_REVERSE );
 
 		/* Show command's output */
 

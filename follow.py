@@ -39,16 +39,13 @@ parser.add_argument( "command", help = "Command to watch" )
 parser.add_argument( "arguments", nargs = argparse.REMAINDER, help = "Command to watch" )
 parser.add_argument( "--interval", "-n", type = positive_float, default = 1., help = "Update interval time (seconds)" )
 parser.add_argument( "--shell", "-s", action = "store_true", help = "Execute command through a shell" )
+parser.add_argument( "--no-title", "-t", action = "store_true", help = "Don't show the header line" )
 
 args = parser.parse_args()
 
 command_args = [ args.command ] + args.arguments
 if args.shell:
 	command_args = " ".join( command_args )
-
-title = socket.gethostname() + ": " + args.command
-title_height = 1
-title_width = len( title )
 
 stdscr = curses.initscr()
 curses.noecho()
@@ -62,6 +59,7 @@ res_max_width = 0
 refresh = 2
 last_time = None
 disp_time = None
+title = None
 
 v_offset = 0
 h_offset = 0
@@ -79,7 +77,9 @@ try:
 				last_time = last_time + args.interval
 			refresh = 0
 
-			disp_time = time.strftime( "%c" )
+			if not args.no_title:
+				title = socket.gethostname() + ": " + args.command
+				disp_time = time.strftime( "%c" )
 
 			# Execute the command
 			process = subprocess.Popen( command_args, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, shell = args.shell )
@@ -96,20 +96,25 @@ try:
 		stdscr.erase()
 		screen_height, screen_width = stdscr.getmaxyx()
 
-		try:
-			right_start = screen_width - len( disp_time )
+		if args.no_title:
+			title_height = 0
+		else:
+			title_height = 1
 
-			if right_start > title_width:
-				stdscr.addstr( 0, 0, title, curses.A_REVERSE )
-			elif right_start > 4:
-				stdscr.addstr( 0, 0, title[ :right_start-4 ] + "...", curses.A_REVERSE )
+			try:
+				right_start = screen_width - len( disp_time )
 
-			if right_start >= 0:
-				stdscr.addstr( 0, right_start, disp_time, curses.A_REVERSE )
-			else:
-				stdscr.addstr( 0, 0, disp_time[ -right_start: ], curses.A_REVERSE )
-		except:
-			pass
+				if right_start > len( title ):
+					stdscr.addstr( 0, 0, title, curses.A_REVERSE )
+				elif right_start > 4:
+					stdscr.addstr( 0, 0, title[ :right_start-4 ] + "...", curses.A_REVERSE )
+
+				if right_start >= 0:
+					stdscr.addstr( 0, right_start, disp_time, curses.A_REVERSE )
+				else:
+					stdscr.addstr( 0, 0, disp_time[ -right_start: ], curses.A_REVERSE )
+			except:
+				pass
 
 		# Size of the zone where the output of the command will be display
 		# One line less because of the title
