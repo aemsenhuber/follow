@@ -41,7 +41,7 @@ AC_CHECK_FUNCS([clock_gettime])
 AC_CHECK_FUNCS([dup2])
 
 # NCURSES
-PKG_CHECK_MODULES(NC, ncurses >= 6.0)
+PKG_CHECK_MODULES(NCURSES, ncursesw >= 6.0)
 
 # Output
 AC_CONFIG_HEADERS([config.h])
