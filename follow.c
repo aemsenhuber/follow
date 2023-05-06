@@ -1,3 +1,21 @@
+/**
+ * follow - watch-like program with pager capabilities (C version)
+ *
+ * Copyright 2023 Alexandre Emsenhuber
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -382,12 +400,14 @@ int main( int argc, char** argv ) {
 	/* ------------------ */
 
 	int help = 0;
+	int version = 0;
 	int shell = 0;
 	struct timespec interval = { 1, 0 };
 	int has_title = 1;
 
 	static struct option long_options[] = {
 		{ "help", 0, NULL, 'h' },
+		{ "version", 0, NULL, 'v' },
 		{ "interval", 1, NULL, 'n' },
 		{ "shell", 0, NULL, 's' },
 		{ "no-title", 0, NULL, 't' },
@@ -395,13 +415,28 @@ int main( int argc, char** argv ) {
 	};
 
 	while ( 1 ) {
-		int opt = getopt_long( argc, argv, "++hn:st", long_options, NULL );
+		int opt = getopt_long( argc, argv, "++hvn:st", long_options, NULL );
 		if ( opt < 0 ) break;
 		if ( opt == '?' ) exit( 2 );
 		if ( opt == 'h' ) help++;
+		if ( opt == 'v' ) version++;
 		if ( opt == 'n' ) safe_parse_positive_timespec( optarg, &interval );
 		if ( opt == 's' ) shell++;
 		if ( opt == 't' ) has_title = 0;
+	}
+
+	if ( version ) {
+#ifdef PACKAGE_STRING
+		fputs( PACKAGE_STRING "\n", stderr );
+#endif
+#ifdef PACKAGE_URL
+		fputs( PACKAGE_URL "\n", stderr );
+#endif
+		fputs( "\n", stderr );
+		fputs( "Copyright 2023 Alexandre Emsenhuber\n", stderr );
+		fputs( "Licensed under the Apache License, Version 2.0\n", stderr );
+
+		exit( EXIT_SUCCESS );
 	}
 
 	if ( help || argc - optind < 1 ) {
@@ -410,7 +445,8 @@ int main( int argc, char** argv ) {
 		if ( help ) {
 			fputs( "\n", stderr );
 			fputs( "Program options:\n", stderr );
-			fputs( "  -h --help         Display this help message\n", stderr );
+			fputs( "  -h --help         Display this help message and exit\n", stderr );
+			fputs( "  -v --version      Display version information and exit\n", stderr );
 			fputs( "  -n --interval=N   Refresh the command every N seconds\n", stderr );
 			fputs( "  -s --shell        Use a shell to execute the command\n", stderr );
 			fputs( "  -t --no-title     Don't show the header line\n", stderr );

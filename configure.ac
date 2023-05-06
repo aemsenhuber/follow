@@ -1,6 +1,6 @@
 # Initialize
 AC_PREREQ([2.69])
-AC_INIT([follow], [0.1])
+AC_INIT([follow], [0.1], , , [https://github.com/aemsenhuber/follow])
 AC_CONFIG_AUX_DIR([aux])
 AM_INIT_AUTOMAKE([foreign -Wall -Werror])
 
