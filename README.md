@@ -1,22 +1,36 @@
 ## Name
 
-**follow** - watch-like program with pager capabilities
+**follow** - paging through the output of a given command, which is periodically refreshed
 
 ## Synopsis
 
-`follow.py [--interval SECS] [--shell] command [arguments...]`
+`follow [-n SECS|--interval SECS] [-s|--shell] [-t|--no-title] command [arguments...]`
+
+`follow -h | --help`
+
+`follow -v | --version`
 
 ## Description
 
-**follow** periodically executes the provided command and shows its output on the terminal. It is intended for commands producing a large amount of output by providing a subset of the `less` commands for navigation.
+**follow** is similar to `watch`, but provides paging capabilities. **follow** periodically executes the provided command and shows its output on the terminal. It is intended for commands producing a large amount of output by providing a subset of the `less` commands for navigation.
+
+Two versions exist, which only differ in how the command is executed:
+- A ready-to-use Python script (`follow.py`); the command is executed synchronously, so the interface freezes during its execution (particularly noticeable for commands that need some time to run)
+- A C program that can be compiled using GNU Autotools: the command is executed in the background, and the interface remains responsive all the time
 
 ## Options
 
 <dl>
-<dt>--interval SECS, -n SECS</dt>
-<dd>Update intervals for the command, in seconds.</dd>
-<dt>--shell, -s</dt>
+<dt>-h, --help</dt>
+<dd>Display the help message and exit.</dd>
+<dt>-v, --version</dt>
+<dd>Display version information and exit.</dd>
+<dt>-n SECS, --interval SECS</dt>
+<dd>Refresh the command every SECS seconds.</dd>
+<dt>-s, --shell</dt>
 <dd>Execute the command through a shell, rather than directly.</dd>
+<dt>-t, --no-title</dt>
+<dd>Don't show the header line.</dd>
 </dl>
 
 ## Commands

@@ -1,0 +1,84 @@
+.TH FOLLOW 1 "2023 May 4"
+.SH NAME
+.B follow
+\- paging through the output of a given command, which is periodically refreshed
+.SH SYNOPSIS
+.B follow
+[\-n \fISECS\fR|\-\-interval=\fISECS\fR]
+[\-s|\-\-shell]
+[\-t|\-\-no-title]
+[\-\-]
+\fIcommand\fR [\fIarguments ...\fR]
+.br
+.B follow
+\-h | \-\-help
+.br
+.B follow
+\-v | \-\-version
+.SH DESCRIPTION
+.B follow
+periodically executes the given \fIcommand\fR (along with its \fIarguments\fR). The resulting output is shown on the terminal and can be navigated through using keyboard commands similar to
+.BR less (1).
+.SH OPTIONS
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Shows the help message and exit
+.TP
+\fB\-v\fR, \fB\-\-version\fR
+Shows version information and exit
+.TP
+\fB\-n \fISECS\fR, \fB\-\-interval=\fISECS\fR
+Refresh the command every \fISECS\fR seconds.
+.TP
+\fB\-s\fR, \fB\-\-shell\fR
+Execute the command through a shell, rather than directly.
+.TP
+\fB\-t\fR, \fB\-\-no-title\fR
+Don't show the header line.
+.SH COMMANDS
+.B follow
+understands a subset of the
+.BR less (1)
+commands for navigation through the command's output.
+.TP
+\fBLEFT ARROW\fR
+Move one column to the left
+.TP
+\fBRIGHT ARROW\fR
+Move one column to the right
+.TP
+\fBDOWN ARROW\fR, \fBe\fR, \fBj\fR
+Move one row downwards
+.TP
+\fBUP ARROW\fR, \fBk\fR, \fBy\fR
+Move one row upwards
+.TP
+\fBE\fR, \fBJ\fR
+Move one row downwards (allow movement past the bottom of the output)
+.TP
+\fBK\fR, \fBY\fR
+Move one row upwards (allow movement past the top of the output)
+.TP
+\fBSPACE\fR, \fBf\fR
+Move one screen height downwards
+.TP
+\fBb\fR
+Move one screen height upwards
+.TP
+\fBd\fR
+Move one half screen height downwards
+.TP
+\fBu\fR
+Move one half screen height upwards
+.TP
+\fBg\fR
+Go to top
+.TP
+\fBG\fR
+Go to bottom
+.TP
+\fBF\fR
+Remain at then bottom, even when the height changes (a repeat switches off that mode)
+.TP
+\fBq\fR, \fB^c\fR
+Exit the program.
