@@ -27,6 +27,7 @@
 #include <limits.h> /* For PIPE_BUF */
 #include <errno.h>
 #include <locale.h>
+#include <signal.h>
 
 #include <time.h>
 #include <unistd.h>
@@ -200,6 +201,27 @@ void convert_output( size_t output_len, char* output_buf, size_t* display_len, s
 		}
 		cur_pos++;
 	}
+}
+
+/**
+ * Safely exit the program
+ */
+void safe_exit( int status ) {
+	/* Reset ncurses */
+	if ( !isendwin() ) {
+		echo();
+		endwin();
+	}
+
+	/* Finish execution */
+	exit( status );
+}
+
+/**
+ * Signal handler
+ */
+void safe_signal( int signal ) {
+	safe_exit( EXIT_SUCCESS );
 }
 
 /**
@@ -525,7 +547,14 @@ int main( int argc, char** argv ) {
 	keypad( win, 1 );
 	nodelay( win, 1 );
 
-	int cont = 1;
+	signal( SIGHUP, safe_signal );
+	signal( SIGINT, safe_signal );
+	signal( SIGQUIT, safe_signal );
+	signal( SIGTERM, safe_signal );
+
+	/* Variables for the main loop */
+	/* --------------------------- */
+
 	int refresh = 2;
 	int cmd_pid = -1;
 	int cmd_fd = -1;
@@ -556,7 +585,7 @@ int main( int argc, char** argv ) {
 	int h_diff = 0;
 	int past = 0;
 
-	while( cont ) {
+	while ( 1 ) {
 		if ( refresh && cmd_pid < 0 ) {
 			if ( refresh == 2 ) {
 				safe_monotonic_clock( &next_timer );
@@ -692,7 +721,7 @@ int main( int argc, char** argv ) {
 
 		switch ( wgetch( win ) ) {
 		case 'q':
-			cont = 0;
+			safe_exit( EXIT_SUCCESS );
 			break;
 		case 'r':
 		case 'R':
@@ -761,9 +790,5 @@ int main( int argc, char** argv ) {
 		}
 	}
 
-	keypad( win, 0 );
-	echo();
-	endwin();
-
-	return EXIT_SUCCESS;
+	safe_exit( EXIT_SUCCESS );
 }
