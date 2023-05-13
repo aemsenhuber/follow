@@ -511,7 +511,8 @@ int main( int argc, char** argv ) {
 			exit( EXIT_FAILURE );
 		}
 
-		command_args[0] = "/bin/sh";
+		char* shell = getenv( "SHELL" );
+		command_args[0] = ( shell != NULL && strlen( shell ) ) ? shell : "/bin/sh";
 		command_args[1] = "-c";
 		command_args[2] = shell_command;
 		command_args[3] = NULL;
