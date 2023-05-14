@@ -582,11 +582,10 @@ int main( int argc, char** argv ) {
 	int v_offset = 0;
 	int h_offset = 0;
 	int v_end = 0;
-	int v_diff = 0;
-	int h_diff = 0;
-	int past = 0;
 
 	while ( 1 ) {
+		/* Start a new command execution if needed */
+
 		if ( refresh && cmd_pid < 0 ) {
 			if ( refresh == 2 ) {
 				safe_monotonic_clock( &next_timer );
@@ -615,68 +614,6 @@ int main( int argc, char** argv ) {
 			output_len = 0;
 		}
 
-		/* Prepare window for new output */
-
-		werase( win );
-		int screen_height = getmaxy( win );
-		int screen_width = getmaxx( win );
-
-		/* Show header line */
-
-		int title_height = 0;
-		if ( has_title ) {
-			title_height = show_title( win, screen_width, display_title_left, display_title_right );
-		}
-
-		/* Show command's output */
-
-		/* Size of the zone where the output of the command will be display; take into account the header */
-		int display_height = screen_height - title_height;
-		int display_width = screen_width;
-
-		if ( v_end ) {
-			v_offset = res_max_height > display_height ? res_max_height - display_height : 0;
-		} else if ( v_diff != 0 && past ) {
-			v_offset += v_diff;
-		} else if ( v_diff > 0 ) {
-			v_offset = MAX( v_offset, MIN( v_offset + v_diff, MAX( res_max_height - display_height, 0 ) ) );
-		} else if ( v_diff < 0 ) {
-			v_offset = MIN( v_offset, MAX( v_offset + v_diff, 0 ) );
-		}
-
-		if ( h_diff != 0 && past ) {
-			h_offset += h_diff;
-		} else if ( h_diff > 0 ) {
-			h_offset = MAX( h_offset, MIN( h_offset + h_diff, MAX( res_max_width - display_width, 0 ) ) );
-		} else if ( h_diff < 0 ) {
-			h_offset = MIN( h_offset, MAX( h_offset + h_diff, 0 ) );
-		}
-
-		if ( display_err != 0 ) {
-			/* display_err is negative before the first command finishes; don't display anything during that time */
-			if ( display_err > 0 ) mvwaddstr( win, 1, 0, strerror( display_err ) );
-		} else if ( v_offset > -display_height && v_offset < res_max_height && h_offset > -display_width && h_offset < res_max_width ) {
-			int v_disp_off = MAX( -v_offset, 0 );
-			int v_start = MAX( v_offset, 0 );
-			int h_disp_off = MAX( -h_offset, 0 );
-			int h_start = MAX( h_offset, 0 );
-
-			const int v_end = MIN( v_offset + display_height, res_max_height ) - v_start;
-			for ( int v = 0; v < v_end; v++ ) {
-				const int line_len = lines_len[v + v_start];
-				if ( line_len <= h_offset ) {
-					continue;
-				}
-				const int h_end = MIN( line_len, h_offset + display_width ) - h_start;
-
-				if ( h_end > 0 ) {
-					mvwaddnwstr( win, v_disp_off + v + title_height, h_disp_off, lines[v + v_start] + h_start, h_end );
-				}
-			}
-		}
-
-		wrefresh( win );
-
 		/* Wait for either a character to be pressed or timer to elapse */
 
 		struct timespec cur_timer = { 0, 0 };
@@ -696,6 +633,7 @@ int main( int argc, char** argv ) {
 
 		int pres = poll( fd_desc, 2, timeout );
 
+		/* pres == 0 indicates that the timer has elapsed, it is time to refresh the output */
 		if ( pres == 0 && refresh == 0 ) refresh = 1;
 
 		if ( fd_desc[1].revents ) {
@@ -715,10 +653,28 @@ int main( int argc, char** argv ) {
 			}
 		}
 
-		/* Reset these ones */
-		v_diff = 0;
-		h_diff = 0;
-		past = 0;
+		/* Prepare window for new output */
+
+		werase( win );
+		int screen_height = getmaxy( win );
+		int screen_width = getmaxx( win );
+
+		/* Show header line */
+
+		int title_height = 0;
+		if ( has_title ) {
+			title_height = show_title( win, screen_width, display_title_left, display_title_right );
+		}
+
+		/* Get a key from the terminal and act on it */
+		/* We do this here because we need to know the size of the display are */
+
+		/* Size of the zone where the output of the command will be display; take into account the header */
+		int display_height = screen_height - title_height;
+		int display_width = screen_width;
+		int v_diff = 0;
+		int h_diff = 0;
+		int past = 0;
 
 		switch ( wgetch( win ) ) {
 		case 'q':
@@ -789,6 +745,51 @@ int main( int argc, char** argv ) {
 		default:
 			break;
 		}
+
+		if ( v_end ) {
+			v_offset = res_max_height > display_height ? res_max_height - display_height : 0;
+		} else if ( v_diff != 0 && past ) {
+			v_offset += v_diff;
+		} else if ( v_diff > 0 ) {
+			v_offset = MAX( v_offset, MIN( v_offset + v_diff, MAX( res_max_height - display_height, 0 ) ) );
+		} else if ( v_diff < 0 ) {
+			v_offset = MIN( v_offset, MAX( v_offset + v_diff, 0 ) );
+		}
+
+		if ( h_diff != 0 && past ) {
+			h_offset += h_diff;
+		} else if ( h_diff > 0 ) {
+			h_offset = MAX( h_offset, MIN( h_offset + h_diff, MAX( res_max_width - display_width, 0 ) ) );
+		} else if ( h_diff < 0 ) {
+			h_offset = MIN( h_offset, MAX( h_offset + h_diff, 0 ) );
+		}
+
+		/* Show command's output */
+
+		if ( display_err != 0 ) {
+			/* display_err is negative before the first command finishes; don't display anything during that time */
+			if ( display_err > 0 ) mvwaddstr( win, 1, 0, strerror( display_err ) );
+		} else if ( v_offset > -display_height && v_offset < res_max_height && h_offset > -display_width && h_offset < res_max_width ) {
+			int v_disp_off = MAX( -v_offset, 0 );
+			int v_start = MAX( v_offset, 0 );
+			int h_disp_off = MAX( -h_offset, 0 );
+			int h_start = MAX( h_offset, 0 );
+
+			const int v_end = MIN( v_offset + display_height, res_max_height ) - v_start;
+			for ( int v = 0; v < v_end; v++ ) {
+				const int line_len = lines_len[v + v_start];
+				if ( line_len <= h_offset ) {
+					continue;
+				}
+				const int h_end = MIN( line_len, h_offset + display_width ) - h_start;
+
+				if ( h_end > 0 ) {
+					mvwaddnwstr( win, v_disp_off + v + title_height, h_disp_off, lines[v + v_start] + h_start, h_end );
+				}
+			}
+		}
+
+		wrefresh( win );
 	}
 
 	safe_exit( EXIT_SUCCESS );
