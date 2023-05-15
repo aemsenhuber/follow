@@ -177,7 +177,6 @@ try:
 		stdscr.timeout( max( millis, 0 ) )
 
 		# Reset these ones
-		elapsed = False
 		v_diff = 0
 		h_diff = 0
 		past = False
